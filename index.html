@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SoDEX | User Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { background-color: #0b0e11; color: white; font-family: 'Inter', sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); }
+        .sidebar-item { transition: 0.2s; color: #9ca3af; cursor: pointer; }
+        .sidebar-item:hover { background: rgba(243, 186, 47, 0.1); color: #f3ba2f; }
+        .active-menu { border-left: 4px solid #f3ba2f; background: rgba(243, 186, 47, 0.05); color: #f3ba2f; font-weight: bold; }
+        .hidden-section { display: none; }
+        #btnConnect { position: relative; z-index: 50; cursor: pointer !important; }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+
+    <aside class="w-64 glass flex flex-col border-r border-white/5">
+        <div class="p-6 text-2xl font-bold text-[#f3ba2f] flex items-center gap-2 border-b border-white/5">
+            <i class="fas fa-chart-pie"></i> SoDEX <span class="text-xs font-light text-gray-500">APP</span>
+        </div>
+        <nav class="flex-1 px-4 mt-6 space-y-2">
+            <div id="menuDashboard" onclick="showSection('dashboard')" class="sidebar-item active-menu flex items-center p-3 rounded-xl">
+                <i class="fas fa-th-large mr-3 w-5 text-center"></i> Dashboard
+            </div>
+            <div id="menuRanking" onclick="showSection('ranking')" class="sidebar-item flex items-center p-3 rounded-xl">
+                <i class="fas fa-trophy mr-3 w-5 text-center"></i> Ranking
+            </div>
+        </nav>
+        
+        <div class="p-4 border-t border-white/5">
+            <button id="btnConnect" onclick="connect()" class="w-full bg-[#f3ba2f] text-black font-bold py-4 rounded-2xl hover:bg-[#ffcf4d] active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-yellow-500/10">
+                <i class="fas fa-wallet"></i> <span>Connect Wallet</span>
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 overflow-y-auto p-8 bg-[#080a0c]">
+        <header class="flex justify-between items-center mb-10">
+            <div>
+                <h1 id="mainTitle" class="text-3xl font-bold tracking-tight text-white uppercase">User Status</h1>
+                <p id="subTitle" class="text-gray-500 text-sm mt-1">Volume and rate monitoring - sodex</p>
+            </div>
+            <div class="glass py-2 px-4 rounded-2xl border border-white/10 flex items-center gap-2">
+                <div id="dot" class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+                <span id="statusLabel" class="text-[10px] font-mono text-gray-400 uppercase tracking-widest">Offline</span>
+            </div>
+        </header>
+
+        <section id="sectionDashboard">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+                <div class="glass p-8 rounded-3xl border-b-4 border-transparent hover:border-[#f3ba2f] transition">
+                    <p class="text-gray-500 text-xs font-bold uppercase tracking-widest">Accumulated Volume</p>
+                    <h2 id="volDisplay" class="text-5xl font-black mt-3">$ 0.00</h2>
+                </div>
+                <div class="glass p-8 rounded-3xl border-b-4 border-transparent hover:border-red-500 transition">
+                    <p class="text-gray-500 text-xs font-bold uppercase tracking-widest text-white/60">Trading Fees (Paid)</p>
+                    <h2 id="feeDisplay" class="text-5xl font-black mt-3 text-red-500">0.00 <span class="text-sm text-gray-600 text-red-400/50">SDX</span></h2>
+                </div>
+            </div>
+        </section>
+
+        <section id="sectionRanking" class="hidden-section">
+            <div class="glass rounded-3xl overflow-hidden border border-white/10">
+                <div class="p-6 border-b border-white/5 bg-white/[0.01]">
+                    <h3 class="font-bold text-xl text-[#f3ba2f]">Leaderboard - Top Traders</h3>
+                </div>
+                <div id="tableContent" class="p-8 overflow-x-auto">
+                    <p class="text-center text-gray-600 italic">Please connect your wallet to sync global ranking data.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        let walletAddress = null;
+
+        function showSection(section) {
+            const dash = document.getElementById('sectionDashboard');
+            const rank = document.getElementById('sectionRanking');
+            const menuD = document.getElementById('menuDashboard');
+            const menuR = document.getElementById('menuRanking');
+            const title = document.getElementById('mainTitle');
+
+            if (section === 'dashboard') {
+                dash.classList.remove('hidden-section');
+                rank.classList.add('hidden-section');
+                menuD.classList.add('active-menu');
+                menuR.classList.remove('active-menu');
+                title.innerText = "User Status";
+            } else {
+                dash.classList.add('hidden-section');
+                rank.classList.remove('hidden-section');
+                menuD.classList.remove('active-menu');
+                menuR.classList.add('active-menu');
+                title.innerText = "Global Ranking";
+                if(walletAddress) updateRankingUI(walletAddress);
+            }
+        }
+
+        async function connect() {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    walletAddress = accounts[0];
+                    updateUI(walletAddress);
+                } catch (error) {
+                    console.error("Connection error:", error);
+                }
+            } else {
+                alert("MetaMask not found! Please use a Web3-enabled browser.");
+            }
+        }
+
+        function updateUI(wallet) {
+            const btn = document.getElementById('btnConnect');
+            btn.innerHTML = `<i class="fas fa-check-circle"></i> ${wallet.slice(0,6)}...${wallet.slice(-4)}`;
+            btn.className = "w-full bg-green-500/10 text-green-500 font-bold py-4 rounded-2xl border border-green-500/30 flex items-center justify-center gap-2 cursor-default";
+            btn.onclick = null;
+
+            document.getElementById('statusLabel').innerText = "Online";
+            document.getElementById('statusLabel').classList.replace('text-gray-400', 'text-green-500');
+            document.getElementById('dot').classList.replace('bg-red-500', 'bg-green-500');
+
+            // Gerando valores para o Usuário
+            const userVol = (Math.random() * 2000 + 500).toFixed(2);
+            const userFee = (userVol * 0.003).toFixed(4);
+
+            document.getElementById('volDisplay').innerText = "$ " + userVol;
+            document.getElementById('feeDisplay').innerHTML = `${userFee} <span class="text-sm text-gray-600 text-red-400/50">SDX</span>`;
+            
+            updateRankingUI(wallet, userVol);
+        }
+
+        function updateRankingUI(wallet, userVol = "1,200.00") {
+            // Competidores fixos (Simulação de Baleias)
+            const whales = [
+                { rank: "1st", address: "0x742d...44e", vol: "24,150.80", status: "Active" },
+                { rank: "2nd", address: "0x31a2...91b", vol: "18,205.10", status: "Active" }
+            ];
+
+            let rows = whales.map(w => `
+                <tr class="hover:bg-white/5 opacity-50 transition">
+                    <td class="p-5 font-bold">${w.rank}</td>
+                    <td class="p-5 font-mono text-sm text-gray-400">${w.address}</td>
+                    <td class="p-5 font-bold text-gray-400">$ ${w.vol}</td>
+                    <td class="p-5"><span class="text-[10px] border border-gray-700 px-2 py-1 rounded text-gray-600">${w.status}</span></td>
+                </tr>
+            `).join('');
+
+            // Adicionando a sua posição (3rd)
+            rows += `
+                <tr class="hover:bg-[#f3ba2f]/5 bg-[#f3ba2f]/5 border-y border-[#f3ba2f]/10 transition">
+                    <td class="p-5 font-bold text-[#f3ba2f]">3rd</td>
+                    <td class="p-5 font-mono text-sm text-white">${wallet} <span class="text-[10px] bg-[#f3ba2f] text-black px-1 rounded ml-2 font-bold uppercase">You</span></td>
+                    <td class="p-5 text-green-500 font-bold">$ ${userVol}</td>
+                    <td class="p-5"><span class="text-[10px] bg-green-500/20 text-green-500 px-2 py-1 rounded font-bold">ONLINE</span></td>
+                </tr>
+            `;
+
+            document.getElementById('tableContent').innerHTML = `
+                <table class="w-full text-left min-w-[600px]">
+                    <thead class="bg-white/5 text-gray-400 text-[10px] uppercase tracking-[0.2em]">
+                        <tr>
+                            <th class="p-5">Position</th>
+                            <th class="p-5">Wallet Address</th>
+                            <th class="p-5">Volume (USD)</th>
+                            <th class="p-5">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5">${rows}</tbody>
+                </table>
+            `;
+        }
+    </script>
+</body>
+</html>
