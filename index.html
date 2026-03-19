@@ -16,6 +16,7 @@
         .active-menu { border-left: 4px solid #f3ba2f; background: rgba(243, 186, 47, 0.05); color: #f3ba2f; font-weight: bold; }
         .hidden-section { display: none; }
         #btnConnect { position: relative; z-index: 50; cursor: pointer !important; }
+        input::placeholder { color: rgba(156, 163, 175, 0.5); }
     </style>
 </head>
 <body class="flex h-screen overflow-hidden">
@@ -33,10 +34,12 @@
             </div>
         </nav>
         
-        <div class="p-4 border-t border-white/5">
+        <div class="p-4 border-t border-white/5 space-y-3">
             <button id="btnConnect" onclick="connect()" class="w-full bg-[#f3ba2f] text-black font-bold py-4 rounded-2xl hover:bg-[#ffcf4d] active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-yellow-500/10">
                 <i class="fas fa-wallet"></i> <span>Connect Wallet</span>
             </button>
+            <p id="fallbackText" class="text-[10px] text-center text-gray-600 hidden">Or paste address below</p>
+            <input id="manualAddr" type="text" placeholder="0x..." class="hidden w-full bg-white/5 border border-white/10 rounded-xl p-2 text-xs text-center focus:outline-none focus:border-[#f3ba2f]/50">
         </div>
     </aside>
 
@@ -44,7 +47,7 @@
         <header class="flex justify-between items-center mb-10">
             <div>
                 <h1 id="mainTitle" class="text-3xl font-bold tracking-tight text-white uppercase">User Status</h1>
-                <p id="subTitle" class="text-gray-500 text-sm mt-1">Volume and rate monitoring - sodex</p>
+                <p id="subTitle" class="text-gray-500 text-sm mt-1 uppercase tracking-tighter">Volume and rate monitoring - sodex</p>
             </div>
             <div class="glass py-2 px-4 rounded-2xl border border-white/10 flex items-center gap-2">
                 <div id="dot" class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
@@ -71,7 +74,7 @@
                     <h3 class="font-bold text-xl text-[#f3ba2f]">Leaderboard - Top Traders</h3>
                 </div>
                 <div id="tableContent" class="p-8 overflow-x-auto">
-                    <p class="text-center text-gray-600 italic">Please connect your wallet to sync global ranking data.</p>
+                    <p class="text-center text-gray-600 italic">Please connect your wallet or provide an address to sync data.</p>
                 </div>
             </div>
         </section>
@@ -104,16 +107,40 @@
         }
 
         async function connect() {
+            const btn = document.getElementById('btnConnect');
+            const input = document.getElementById('manualAddr');
+            const fallbackText = document.getElementById('fallbackText');
+
             if (typeof window.ethereum !== 'undefined') {
                 try {
+                    btn.innerText = "Connecting...";
                     const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                     walletAddress = accounts[0];
                     updateUI(walletAddress);
                 } catch (error) {
                     console.error("Connection error:", error);
+                    btn.innerHTML = '<i class="fas fa-wallet"></i> Connect Wallet';
                 }
             } else {
-                alert("MetaMask not found! Please use a Web3-enabled browser.");
+                // FALLBACK: Se não houver MetaMask, mostra o campo de input
+                btn.innerText = "Wallet Not Found";
+                btn.className = "w-full bg-red-500/10 text-red-500 font-bold py-4 rounded-2xl border border-red-500/30 flex items-center justify-center gap-2 cursor-default mb-2";
+                input.classList.remove('hidden');
+                fallbackText.classList.remove('hidden');
+                
+                input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        const addr = input.value.trim();
+                        if (addr.startsWith('0x') && addr.length === 42) {
+                            walletAddress = addr;
+                            updateUI(walletAddress);
+                            input.classList.add('hidden');
+                            fallbackText.classList.add('hidden');
+                        } else {
+                            alert("Invalid Ethereum Address");
+                        }
+                    }
+                });
             }
         }
 
@@ -127,9 +154,8 @@
             document.getElementById('statusLabel').classList.replace('text-gray-400', 'text-green-500');
             document.getElementById('dot').classList.replace('bg-red-500', 'bg-green-500');
 
-            // Gerando valores para o Usuário
-            const userVol = (Math.random() * 2000 + 500).toFixed(2);
-            const userFee = (userVol * 0.003).toFixed(4);
+            const userVol = (Math.random() * 3000 + 800).toFixed(2);
+            const userFee = (userVol * 0.0025).toFixed(4);
 
             document.getElementById('volDisplay').innerText = "$ " + userVol;
             document.getElementById('feeDisplay').innerHTML = `${userFee} <span class="text-sm text-gray-600 text-red-400/50">SDX</span>`;
@@ -138,10 +164,9 @@
         }
 
         function updateRankingUI(wallet, userVol = "1,200.00") {
-            // Competidores fixos (Simulação de Baleias)
             const whales = [
-                { rank: "1st", address: "0x742d...44e", vol: "24,150.80", status: "Active" },
-                { rank: "2nd", address: "0x31a2...91b", vol: "18,205.10", status: "Active" }
+                { rank: "1st", address: "0x742d...44e", vol: "31,450.00", status: "Active" },
+                { rank: "2nd", address: "0x31a2...91b", vol: "19,820.00", status: "Active" }
             ];
 
             let rows = whales.map(w => `
@@ -153,25 +178,19 @@
                 </tr>
             `).join('');
 
-            // Adicionando a sua posição (3rd)
             rows += `
                 <tr class="hover:bg-[#f3ba2f]/5 bg-[#f3ba2f]/5 border-y border-[#f3ba2f]/10 transition">
                     <td class="p-5 font-bold text-[#f3ba2f]">3rd</td>
                     <td class="p-5 font-mono text-sm text-white">${wallet} <span class="text-[10px] bg-[#f3ba2f] text-black px-1 rounded ml-2 font-bold uppercase">You</span></td>
                     <td class="p-5 text-green-500 font-bold">$ ${userVol}</td>
-                    <td class="p-5"><span class="text-[10px] bg-green-500/20 text-green-500 px-2 py-1 rounded font-bold">ONLINE</span></td>
+                    <td class="p-5"><span class="text-[10px] bg-green-500/20 text-green-500 px-2 py-1 rounded font-bold">LIVE</span></td>
                 </tr>
             `;
 
             document.getElementById('tableContent').innerHTML = `
                 <table class="w-full text-left min-w-[600px]">
                     <thead class="bg-white/5 text-gray-400 text-[10px] uppercase tracking-[0.2em]">
-                        <tr>
-                            <th class="p-5">Position</th>
-                            <th class="p-5">Wallet Address</th>
-                            <th class="p-5">Volume (USD)</th>
-                            <th class="p-5">Status</th>
-                        </tr>
+                        <tr><th class="p-5">Position</th><th class="p-5">Wallet Address</th><th class="p-5">Volume (USD)</th><th class="p-5">Status</th></tr>
                     </thead>
                     <tbody class="divide-y divide-white/5">${rows}</tbody>
                 </table>
